@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "deploy": "bash deploy.sh",
+    "build": "react-scripts build",
+    "start:prod": "pm2 start ecosystem.config.js --env production"
+  }
+} 
