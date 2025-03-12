@@ -2,7 +2,6 @@ const Data = require('../models/Data');
 const csv = require('csv-parser');
 const fs = require('fs');
 const { sql, poolPromise } = require('../config/database');
-const NetworkMetrics = require('../models/NetworkMetrics');
 
 const dataController = {
   // Get columns
@@ -13,7 +12,7 @@ const dataController = {
         .query(`
           SELECT COLUMN_NAME
           FROM INFORMATION_SCHEMA.COLUMNS
-          WHERE TABLE_NAME = 'your_table_name'
+          WHERE TABLE_NAME = '[4G cell daily Beyond]'
         `);
       
       res.json(result.recordset.map(row => row.COLUMN_NAME));
@@ -54,11 +53,11 @@ const dataController = {
 
       // Create query with parameters
       const placeholders = parameters.map(() => '?').join(',');
-      const query = `SELECT * FROM [4G cell daily Beyond] WHERE Site_ID IN (${placeholders})`;
+      const query = `SELECT * FROM [4G cell daily Beyond] WHERE Site_ID IN (@siteIds)`;
       
       // Execute query
       const result = await pool.request()
-        .input('Site_ID', sql.VarChar, parameters)
+        .input('siteIds', sql.VarChar, parameters.join(','))
         .query(query);
 
       // Delete temporary file

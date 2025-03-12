@@ -8,8 +8,9 @@ const dbConfig = {
     server: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT),
     options: {
-        encrypt: true,  // Untuk Azure
-        trustServerCertificate: true  // Untuk development
+        encrypt: false,  // Set false untuk koneksi lokal
+        trustServerCertificate: true,
+        enableArithAbort: true
     }
 };
 

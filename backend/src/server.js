@@ -4,7 +4,7 @@ const cors = require('cors');
 const dataRoutes = require('./routes/dataRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.API_PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
