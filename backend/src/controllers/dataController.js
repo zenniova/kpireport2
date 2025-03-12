@@ -2,6 +2,7 @@ const Data = require('../models/Data');
 const csv = require('csv-parser');
 const fs = require('fs');
 const pool = require('../config/database');
+const NetworkMetrics = require('../models/NetworkMetrics');
 
 const dataController = {
   // Get available columns from database
@@ -46,7 +47,7 @@ const dataController = {
 
       // Create query with parameters
       const placeholders = parameters.map(() => '?').join(',');
-      const query = `SELECT * FROM kpi WHERE Site_ID IN (${placeholders})`;
+      const query = `SELECT * FROM [4G cell daily Beyond] WHERE Site_ID IN (${placeholders})`;
       
       // Execute query
       const [rows] = await pool.query(query, parameters);
@@ -92,15 +93,8 @@ const dataController = {
       
       const query = `
         SELECT 
-          ${columnList},
-          CASE 
-            WHEN DAY REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' 
-              THEN DATE_FORMAT(STR_TO_DATE(DAY, '%Y-%m-%d'), '%m/%d/%Y')
-            WHEN DAY REGEXP '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$' 
-              THEN DATE_FORMAT(STR_TO_DATE(DAY, '%m/%d/%Y'), '%m/%d/%Y')
-            ELSE DAY 
-          END as DAY
-        FROM kpi 
+          ${columnList}
+        FROM [4G cell daily Beyond] 
         WHERE Site_ID IN (${placeholders})
         AND (
           (DAY REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' 
@@ -455,7 +449,7 @@ const dataController = {
               Site_ID,
               Cell_id,
               ${metrics.join(',')}
-            FROM kpi 
+            FROM [4G cell daily Beyond]
             WHERE Site_ID IN (?)
             AND STR_TO_DATE(DAY, '%m/%d/%Y') 
               BETWEEN STR_TO_DATE(?, '%m/%d/%Y') 
@@ -471,7 +465,7 @@ const dataController = {
               ${metrics.join(',')},
               COUNT(*) as count,
               ${metrics.map(metric => `AVG(${metric}) as avg_${metric}`).join(',')}
-            FROM kpi 
+            FROM [4G cell daily Beyond]
             WHERE Site_ID IN (?)
             AND STR_TO_DATE(DAY, '%m/%d/%Y') 
               BETWEEN STR_TO_DATE(?, '%m/%d/%Y') 
@@ -549,6 +543,79 @@ const dataController = {
       console.error('Error fetching comparison data:', error);
       res.status(500).json({ error: error.message });
     }
+  },
+
+  processNetworkData: async (req, res) => {
+    try {
+      const data = req.body;
+      
+      const metrics = new NetworkMetrics({
+        date: new Date(data.Day),
+        siteId: data['Site ID'],
+        neName: data['NE Name'],
+        eNodeBID: parseInt(data.eNodeBID),
+        cellId: parseInt(data['Cell Id']),
+        cellName: data.Cellname,
+        metrics: {
+          availability: {
+            beyondSR: parseFloat(data['AVAILABILITY_BEYOND_SR(%)'])
+          },
+          users: {
+            totalAvg: parseFloat(data['Total Avg User']),
+            totalMax: parseFloat(data['Total Max User']),
+            avgBH: parseFloat(data['AVERAGE_USER_BH']),
+            maxBH: parseFloat(data['MAX_USER_BH']),
+            activeUserAvgBH: parseFloat(data['L Traffic ActiveUser Avg_BH']),
+            activeUserMaxBH: parseFloat(data['L Traffic ActiveUser Max_BH'])
+          },
+          traffic: {
+            uplink: {
+              volume: parseFloat(data['Uplink_Traffic_Volume(MB)']),
+              utilization: parseFloat(data['PRB_UL_UTIL_BH(%)'])
+            },
+            downlink: {
+              volume: parseFloat(data['Downlink_Traffic_Volume(MB)']),
+              utilization: parseFloat(data['PRB_DL_UTIL_BH(%)'])
+            }
+          },
+          performance: {
+            callSetupSuccessRate: parseFloat(data['Call Setup Success Rate (%)']),
+            rrcSuccessRate: parseFloat(data['RRC Success Rate (%)']),
+            erabSuccessRate: parseFloat(data['ERAB Success Rate (%)']),
+            s1SignalinkSR: parseFloat(data['S1 SIGNALINK SR (%)']),
+            servicesDropRate: parseFloat(data['SERVICES DROP RATE (%)'])
+          }
+        }
+      });
+
+      await metrics.save();
+      res.status(201).json({
+        success: true,
+        data: metrics
+      });
+    } catch (error) {
+      console.error('Error processing network data:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
+  },
+
+  getNetworkMetrics: async (req, res) => {
+    try {
+      const metrics = await NetworkMetrics.find(req.query);
+      res.status(200).json({
+        success: true,
+        count: metrics.length,
+        data: metrics
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
   }
 };
 
@@ -604,4 +671,7 @@ function formatDataForCombinedCharts(beforeData, afterData, metrics) {
   return combinedData.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
-module.exports = dataController; 
+module.exports = {
+  ...dataController,
+  processNetworkData
+}; 

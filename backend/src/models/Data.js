@@ -1,107 +1,165 @@
-const pool = require('../config/database');
+const mongoose = require('mongoose');
 
-class Data {
-  static async getDataByColumns(columns, startDate, endDate) {
-    try {
-      // Memastikan DAY selalu termasuk dalam query untuk filtering
-      if (!columns.includes('DAY')) {
-        columns.unshift('DAY');
-      }
+const DataSchema = new mongoose.Schema({
+    // Basic Cell Information
+    day: {
+        type: Date,
+        required: true,
+        index: true
+    },
+    siteId: {
+        type: String,
+        required: true,
+        index: true
+    },
+    neName: {
+        type: String,
+        required: true
+    },
+    eNodeBID: {
+        type: Number,
+        required: true
+    },
+    cellId: {
+        type: Number,
+        required: true
+    },
+    cellName: {
+        type: String,
+        required: true,
+        index: true
+    },
 
-      const selectedColumns = columns.join(', ');
-      const query = `
-        SELECT ${selectedColumns}
-        FROM kpi
-        WHERE DAY BETWEEN ? AND ?
-        ORDER BY DAY ASC
-      `;
+    // Key Performance Indicators
+    kpi: {
+        availability: {
+            beyondSR: Number,              // AVAILABILITY_BEYOND_SR(%)
+            cellAvailDuration: Number,     // L Cell Avail Dur (s)
+            cellUnavailDuration: {
+                system: Number,            // L Cell Unavail Dur Sys (s)
+                energySaving: Number,      // L Cell Unavail Dur EnergySaving (s)
+                manual: Number             // L Cell Unavail Dur Manual (s)
+            }
+        },
+        users: {
+            total: {
+                avg: Number,               // Total Avg User
+                max: Number                // Total Max User
+            },
+            busyHour: {
+                avg: Number,               // AVERAGE_USER_BH
+                max: Number,               // MAX_USER_BH
+                activeAvg: Number,         // L Traffic ActiveUser Avg_BH
+                activeMax: Number          // L Traffic ActiveUser Max_BH
+            }
+        },
+        traffic: {
+            uplink: {
+                volume: Number,            // Uplink_Traffic_Volume(MB)
+                utilization: Number,       // PRB_UL_UTIL_BH(%)
+                throughput: {
+                    mean: Number,          // MEAN_CELL_UL_THR (Mbps)
+                    userMean: Number       // MEAN_USER_UL_THR (Mbps)
+                }
+            },
+            downlink: {
+                volume: Number,            // Downlink_Traffic_Volume(MB)
+                utilization: Number,       // PRB_DL_UTIL_BH(%)
+                throughput: {
+                    mean: Number,          // MEAN_CELL_DL_THR (Mbps)
+                    userMean: Number       // MEAN_USER_DL_THR (Mbps)
+                }
+            }
+        },
+        performance: {
+            success: {
+                callSetup: Number,         // Call Setup Success Rate (%)
+                rrc: Number,               // RRC Success Rate (%)
+                erab: Number,              // ERAB Success Rate (%)
+                s1Signalink: Number,       // S1 SIGNALINK SR (%)
+                intraFHO: Number,          // INTRA FHO SR (%)
+                csfb: Number               // CSFB SR (%)
+            },
+            drop: {
+                services: Number,          // SERVICES DROP RATE (%)
+                transmission: Number       // SERVICES DROP RATE TRANSMISSION (%)
+            }
+        },
+        radio: {
+            pdcch: {
+                usage: Number,             // PDCCH_USAGE (%)
+                agg8: Number              // PDCCH_AGG8 (%)
+            },
+            pusch: {
+                utilization: Number        // PUSCH_UTIL (%)
+            },
+            rank2Distribution: Number      // RANK2 DISTRIBUTION (%)
+        }
+    },
 
-      const [results] = await pool.query(query, [startDate, endDate]);
-      return results;
-    } catch (error) {
-      throw new Error(`Error fetching KPI data: ${error.message}`);
+    // Raw Counters
+    counters: {
+        rrc: {
+            num: Number,                   // RRC_NUM
+            den: Number                    // RRC_DEN
+        },
+        erab: {
+            setup: {
+                num: Number,               // ERAB_SETUP_NUM
+                den: Number                // ERAB_SETUP_DENUM
+            }
+        },
+        s1: {
+            signal: {
+                num: Number,               // S1_SIG_NUM
+                den: Number                // S1_SIG_DENUM
+            }
+        },
+        prb: {
+            uplink: {
+                num: Number,               // PRB_UL_NUM
+                den: Number                // PRB_UL_DEN
+            },
+            downlink: {
+                num: Number,               // PRB_DL_NUM
+                den: Number                // PRB_DL_DEN
+            }
+        }
+    },
+
+    createdAt: {
+        type: Date,
+        default: Date.now
     }
-  }
+}, {
+    timestamps: true
+});
 
-  // Mendapatkan daftar kolom yang tersedia
-  static async getAvailableColumns() {
-    const columns = [
-      'id',
-      'DAY',
-      'Site_iD',
-      'NE_Name',
-      'eNodeB_ID',
-      'Cell_id',
-      'Site_id_type_sector',
-      'Cellname',
-      'CSSR',
-      'Service_drop',
-      'RRC_User_BH',
-      'Active_User_BH',
-      'PRB_DL_BH',
-      'PRB_UL_BH',
-      'User_DL_Thp_BH',
-      'User_UL_Thp_BH',
-      'Total_Payload_GB'
-    ];
-    return columns;
-  }
+// Indexes for common queries
+DataSchema.index({ 'day': 1, 'siteId': 1 });
+DataSchema.index({ 'day': 1, 'cellName': 1 });
+DataSchema.index({ 'kpi.availability.beyondSR': 1 });
+DataSchema.index({ 'kpi.performance.success.callSetup': 1 });
 
-  static async getNetworkData(startDate, endDate, siteList, selectedMetrics) {
-    try {
-      const siteIds = siteList.map(site => site.Site_ID);
-      const placeholders = siteIds.map(() => '?').join(',');
-      
-      // Dynamically build the SELECT clause based on selectedMetrics
-      const metricsColumns = ['DAY', 'Site_ID', ...selectedMetrics];
-      const selectClause = metricsColumns.join(', ');
+// Virtual for cell full identifier
+DataSchema.virtual('cellIdentifier').get(function() {
+    return `${this.siteId}_${this.cellId}`;
+});
 
-      const query = `
-        SELECT ${selectClause}
-        FROM kpi
-        WHERE Site_iD IN (${placeholders})
-        AND DAY BETWEEN ? AND ?
-        ORDER BY DAY ASC, Site_iD ASC
-      `;
+// Method to get KPI summary
+DataSchema.methods.getKPISummary = function() {
+    return {
+        availability: this.kpi.availability.beyondSR,
+        callSetupSuccess: this.kpi.performance.success.callSetup,
+        trafficVolume: {
+            uplink: this.kpi.traffic.uplink.volume,
+            downlink: this.kpi.traffic.downlink.volume
+        },
+        users: {
+            average: this.kpi.users.total.avg,
+            maximum: this.kpi.users.total.max
+        }
+    };
+};
 
-      console.log('Executing query:', query);
-      console.log('Parameters:', [...siteIds, startDate, endDate]);
-
-      const [results] = await pool.query(query, [...siteIds, startDate, endDate]);
-      return results;
-    } catch (error) {
-      console.error('Database error:', error);
-      throw new Error(`Error fetching network data: ${error.message}`);
-    }
-  }
-
-  static async saveUploadHistory(fileInfo) {
-    try {
-      const query = `
-        INSERT INTO upload_history 
-        (filename, upload_date, file_type) 
-        VALUES (?, NOW(), ?)
-      `;
-
-      const [result] = await pool.query(query, [
-        fileInfo.filename,
-        fileInfo.fileType
-      ]);
-      return result;
-    } catch (error) {
-      throw new Error(`Error saving upload history: ${error.message}`);
-    }
-  }
-
-  // Method untuk testing koneksi database
-  static async testConnection() {
-    try {
-      const [result] = await pool.query('SELECT 1');
-      return result;
-    } catch (error) {
-      throw new Error(`Database connection test failed: ${error.message}`);
-    }
-  }
-}
-
-module.exports = Data; 
+module.exports = mongoose.model('Data', DataSchema); 

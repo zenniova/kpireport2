@@ -1,50 +1,16 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+const mongoose = require('mongoose');
 
-const dbConfig = {
-  host: process.env.DB_HOST,     // IP PC lokal Anda
-  port: process.env.DB_PORT,     // Port MySQL default 3306
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  // Tambahkan timeout yang lebih lama untuk koneksi remote
-  connectTimeout: 60000
+const connectDB = async () => {
+    try {
+        const conn = await mongoose.connect(process.env.MONGODB_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+        });
+        console.log(`MongoDB Connected: ${conn.connection.host}`);
+    } catch (error) {
+        console.error(`Error: ${error.message}`);
+        process.exit(1);
+    }
 };
 
-// Tambahkan SSL untuk production
-if (process.env.NODE_ENV === 'production') {
-  dbConfig.ssl = {
-    rejectUnauthorized: false
-  };
-}
-
-// Log konfigurasi (tanpa password)
-console.log('Database configuration:', {
-  host: dbConfig.host,
-  port: dbConfig.port,
-  user: dbConfig.user,
-  database: dbConfig.database
-});
-
-const pool = mysql.createPool(dbConfig);
-
-// Test connection immediately
-const testConnection = async () => {
-  try {
-    const connection = await pool.getConnection();
-    console.log('✅ Database connected successfully');
-    connection.release();
-    return true;
-  } catch (err) {
-    console.error('❌ Database connection error:', err);
-    return false;
-  }
-};
-
-// Execute test
-testConnection();
-
-module.exports = pool; 
+module.exports = connectDB; 
