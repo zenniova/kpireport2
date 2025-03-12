@@ -162,4 +162,25 @@ DataSchema.methods.getKPISummary = function() {
     };
 };
 
-module.exports = mongoose.model('Data', DataSchema); 
+// Untuk SQL Server, kita bisa membuat class untuk representasi data
+class Data {
+    constructor(data) {
+        this.date = data.date;
+        this.siteId = data.siteId;
+        this.cellName = data.cellName;
+        // ... other properties
+    }
+
+    // Method untuk mengubah data ke format SQL
+    toSQL() {
+        return {
+            date: this.date,
+            site_id: this.siteId,
+            cell_name: this.cellName,
+            // ... other fields
+        };
+    }
+}
+
+module.exports = mongoose.model('Data', DataSchema);
+module.exports = Data; 

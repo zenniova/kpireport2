@@ -1,25 +1,32 @@
 const Data = require('../models/Data');
 const csv = require('csv-parser');
 const fs = require('fs');
-const pool = require('../config/database');
+const { sql, poolPromise } = require('../config/database');
 const NetworkMetrics = require('../models/NetworkMetrics');
 
 const dataController = {
-  // Get available columns from database
+  // Get columns
   async getColumns(req, res) {
     try {
-      const [rows] = await pool.query('SHOW COLUMNS FROM kpi');
-      const columns = rows.map(row => row.Field);
-      res.json(columns);
+      const pool = await poolPromise;
+      const result = await pool.request()
+        .query(`
+          SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = 'your_table_name'
+        `);
+      
+      res.json(result.recordset.map(row => row.COLUMN_NAME));
     } catch (error) {
-      console.error('Error fetching columns:', error);
-      res.status(500).json({ error: 'Failed to fetch columns' });
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
     }
   },
 
   // Process CSV file and get data based on parameters
   async processData(req, res) {
     try {
+      const pool = await poolPromise;
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
@@ -50,15 +57,17 @@ const dataController = {
       const query = `SELECT * FROM [4G cell daily Beyond] WHERE Site_ID IN (${placeholders})`;
       
       // Execute query
-      const [rows] = await pool.query(query, parameters);
+      const result = await pool.request()
+        .input('Site_ID', sql.VarChar, parameters)
+        .query(query);
 
       // Delete temporary file
       fs.unlinkSync(req.file.path);
 
       res.json({
         parameters,
-        data: rows,
-        totalRows: rows.length,
+        data: result.recordset,
+        totalRows: result.recordset.length,
         message: 'Data retrieved successfully'
       });
 
@@ -115,8 +124,13 @@ const dataController = {
       
       // Duplicate date parameters for both format conditions
       const queryParams = [...parameters, startDate, endDate, startDate, endDate];
-      const [rows] = await pool.query(query, queryParams);
-      res.json(rows);
+      const pool = await poolPromise;
+      const result = await pool.request()
+        .input('Site_ID', sql.VarChar, parameters)
+        .input('startDate', sql.VarChar, startDate)
+        .input('endDate', sql.VarChar, endDate)
+        .query(query);
+      res.json(result.recordset);
     } catch (error) {
       console.error('Error fetching data:', error);
       res.status(500).json({ error: 'Failed to fetch data' });
@@ -148,15 +162,16 @@ const dataController = {
             ELSE NULL 
           END ASC
       `;
-      const [dates] = await pool.query(query);
-      console.log('Raw dates from DB:', dates);
+      const pool = await poolPromise;
+      const result = await pool.request().query(query);
+      console.log('Raw dates from DB:', result.recordset);
       
-      if (dates.length === 0) {
+      if (result.recordset.length === 0) {
         return res.status(404).json({ error: 'No dates available' });
       }
 
       // Filter out any null values and format dates
-      const availableDates = dates
+      const availableDates = result.recordset
         .filter(d => d.formatted_day) // Remove any null values
         .map(d => {
           console.log('Processing date:', {
@@ -391,8 +406,14 @@ const dataController = {
       }
 
       // Filter out any non-column metrics
-      const [columns] = await pool.query('SHOW COLUMNS FROM kpi');
-      const validColumns = new Set(columns.map(col => col.Field));
+      const pool = await poolPromise;
+      const result = await pool.request()
+        .query(`
+          SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = 'kpi'
+        `);
+      const validColumns = new Set(result.recordset.map(row => row.COLUMN_NAME));
       
       const validMetrics = Array.from(metrics).filter(metric => 
         validColumns.has(metric) && 
@@ -479,17 +500,18 @@ const dataController = {
       const executedQuery = getQuery('executed');
       const surroundingQuery = getQuery('surrounding');
 
-      const [executedRows] = await pool.query(executedQuery, [
-        siteIds, 
-        executedStart, 
-        executedEnd
-      ]);
+      const pool = await poolPromise;
+      const executedResult = await pool.request()
+        .input('Site_ID', sql.VarChar, siteIds)
+        .input('executedStart', sql.VarChar, executedStart)
+        .input('executedEnd', sql.VarChar, executedEnd)
+        .query(executedQuery);
 
-      const [surroundingRows] = await pool.query(surroundingQuery, [
-        siteIds, 
-        surroundingStart, 
-        surroundingEnd
-      ]);
+      const surroundingResult = await pool.request()
+        .input('Site_ID', sql.VarChar, siteIds)
+        .input('surroundingStart', sql.VarChar, surroundingStart)
+        .input('surroundingEnd', sql.VarChar, surroundingEnd)
+        .query(surroundingQuery);
 
       // Proses data sesuai tipe
       const processDataByMetric = (rows) => {
@@ -525,8 +547,8 @@ const dataController = {
       };
 
       // Proses data untuk kedua periode
-      const executedData = processDataByMetric(executedRows);
-      const surroundingData = processDataByMetric(surroundingRows);
+      const executedData = processDataByMetric(executedResult.recordset);
+      const surroundingData = processDataByMetric(surroundingResult.recordset);
 
       // Format hasil akhir
       const result = {};
@@ -588,6 +610,7 @@ const dataController = {
         }
       });
 
+      const pool = await poolPromise;
       await metrics.save();
       res.status(201).json({
         success: true,
@@ -604,6 +627,7 @@ const dataController = {
 
   getNetworkMetrics: async (req, res) => {
     try {
+      const pool = await poolPromise;
       const metrics = await NetworkMetrics.find(req.query);
       res.status(200).json({
         success: true,
