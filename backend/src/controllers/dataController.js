@@ -569,51 +569,42 @@ const dataController = {
   processNetworkData: async (req, res) => {
     try {
       const data = req.body;
-      
-      const metrics = new NetworkMetrics({
-        date: new Date(data.Day),
-        siteId: data['Site ID'],
-        neName: data['NE Name'],
-        eNodeBID: parseInt(data.eNodeBID),
-        cellId: parseInt(data['Cell Id']),
-        cellName: data.Cellname,
-        metrics: {
-          availability: {
-            beyondSR: parseFloat(data['AVAILABILITY_BEYOND_SR(%)'])
-          },
-          users: {
-            totalAvg: parseFloat(data['Total Avg User']),
-            totalMax: parseFloat(data['Total Max User']),
-            avgBH: parseFloat(data['AVERAGE_USER_BH']),
-            maxBH: parseFloat(data['MAX_USER_BH']),
-            activeUserAvgBH: parseFloat(data['L Traffic ActiveUser Avg_BH']),
-            activeUserMaxBH: parseFloat(data['L Traffic ActiveUser Max_BH'])
-          },
-          traffic: {
-            uplink: {
-              volume: parseFloat(data['Uplink_Traffic_Volume(MB)']),
-              utilization: parseFloat(data['PRB_UL_UTIL_BH(%)'])
-            },
-            downlink: {
-              volume: parseFloat(data['Downlink_Traffic_Volume(MB)']),
-              utilization: parseFloat(data['PRB_DL_UTIL_BH(%)'])
-            }
-          },
-          performance: {
-            callSetupSuccessRate: parseFloat(data['Call Setup Success Rate (%)']),
-            rrcSuccessRate: parseFloat(data['RRC Success Rate (%)']),
-            erabSuccessRate: parseFloat(data['ERAB Success Rate (%)']),
-            s1SignalinkSR: parseFloat(data['S1 SIGNALINK SR (%)']),
-            servicesDropRate: parseFloat(data['SERVICES DROP RATE (%)'])
-          }
-        }
-      });
-
       const pool = await poolPromise;
-      await metrics.save();
+      
+      // Query untuk menyimpan data ke SQL Server
+      const query = `
+        INSERT INTO [4G cell daily Beyond] (
+          DAY,
+          Site_ID,
+          NE_Name,
+          eNodeBID,
+          Cell_Id,
+          Cellname,
+          AVAILABILITY_BEYOND_SR
+        ) VALUES (
+          @day,
+          @siteId,
+          @neName,
+          @eNodeBID,
+          @cellId,
+          @cellName,
+          @availability
+        )
+      `;
+
+      const result = await pool.request()
+        .input('day', sql.Date, new Date(data.Day))
+        .input('siteId', sql.VarChar, data['Site ID'])
+        .input('neName', sql.VarChar, data['NE Name'])
+        .input('eNodeBID', sql.Int, parseInt(data.eNodeBID))
+        .input('cellId', sql.Int, parseInt(data['Cell Id']))
+        .input('cellName', sql.VarChar, data.Cellname)
+        .input('availability', sql.Float, parseFloat(data['AVAILABILITY_BEYOND_SR(%)']))
+        .query(query);
+
       res.status(201).json({
         success: true,
-        data: metrics
+        message: 'Data saved successfully'
       });
     } catch (error) {
       console.error('Error processing network data:', error);
@@ -627,11 +618,13 @@ const dataController = {
   getNetworkMetrics: async (req, res) => {
     try {
       const pool = await poolPromise;
-      const metrics = await NetworkMetrics.find(req.query);
+      const result = await pool.request()
+        .query('SELECT * FROM [4G cell daily Beyond]');
+      
       res.status(200).json({
         success: true,
-        count: metrics.length,
-        data: metrics
+        count: result.recordset.length,
+        data: result.recordset
       });
     } catch (error) {
       res.status(400).json({
@@ -694,7 +687,4 @@ function formatDataForCombinedCharts(beforeData, afterData, metrics) {
   return combinedData.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
-module.exports = {
-  ...dataController,
-  processNetworkData
-}; 
+module.exports = dataController; 
