@@ -2,6 +2,7 @@ const Data = require('../models/Data');
 const csv = require('csv-parser');
 const fs = require('fs');
 const { sql, getPool } = require('../config/database');
+const { DATABASE, QUERY_TEMPLATES } = require('../constants');
 
 const dataController = {
   // Get columns
@@ -82,57 +83,34 @@ const dataController = {
   // Get data for selected columns and parameters
   async getData(req, res) {
     try {
-      const { columns, parameters, startDate, endDate } = req.body;
-      
-      if (!columns || !Array.isArray(columns) || columns.length === 0) {
-        return res.status(400).json({ error: 'Please provide an array of column names' });
-      }
-
-      if (!parameters || !Array.isArray(parameters) || parameters.length === 0) {
-        return res.status(400).json({ error: 'Please provide an array of parameters' });
-      }
-
-      if (!startDate || !endDate) {
-        return res.status(400).json({ error: 'Please provide date range' });
-      }
-
-      const columnList = columns.join(', ');
-      const placeholders = parameters.map(() => '?').join(',');
-      
-      const query = `
-        SELECT 
-          ${columnList}
-        FROM [4G cell daily Beyond] 
-        WHERE Site_ID IN (${placeholders})
-        AND (
-          (DAY REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' 
-            AND STR_TO_DATE(DAY, '%Y-%m-%d') BETWEEN STR_TO_DATE(?, '%m/%d/%Y') AND STR_TO_DATE(?, '%m/%d/%Y'))
-          OR 
-          (DAY REGEXP '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$' 
-            AND STR_TO_DATE(DAY, '%m/%d/%Y') BETWEEN STR_TO_DATE(?, '%m/%d/%Y') AND STR_TO_DATE(?, '%m/%d/%Y'))
-        )
-        ORDER BY 
-          CASE 
-            WHEN DAY REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' 
-              THEN STR_TO_DATE(DAY, '%Y-%m-%d')
-            WHEN DAY REGEXP '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$' 
-              THEN STR_TO_DATE(DAY, '%m/%d/%Y')
-            ELSE NULL 
-          END ASC
-      `;
-      
-      // Duplicate date parameters for both format conditions
-      const queryParams = [...parameters, startDate, endDate, startDate, endDate];
+      const { siteIds, startDate, endDate, metrics } = req.body;
       const pool = getPool();
+
+      // Build dynamic column selection
+      const selectedColumns = metrics.map(metric => `[${metric}]`).join(', ');
+      const query = `
+        SELECT Day, Site_ID, NE_Name, ${selectedColumns}
+        FROM ${DATABASE.TABLE_NAMES.KPI_DATA}
+        WHERE Site_ID IN (@siteIds)
+        AND Day BETWEEN @startDate AND @endDate
+      `;
+
       const result = await pool.request()
-        .input('Site_ID', sql.VarChar, parameters)
-        .input('startDate', sql.VarChar, startDate)
-        .input('endDate', sql.VarChar, endDate)
+        .input('siteIds', sql.VarChar, siteIds.join(','))
+        .input('startDate', sql.Date, new Date(startDate))
+        .input('endDate', sql.Date, new Date(endDate))
         .query(query);
-      res.json(result.recordset);
+
+      res.json({
+        success: true,
+        data: result.recordset
+      });
     } catch (error) {
       console.error('Error fetching data:', error);
-      res.status(500).json({ error: 'Failed to fetch data' });
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
     }
   },
 

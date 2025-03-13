@@ -1,4 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { 
+  Button, 
+  FormControl, 
+  InputLabel, 
+  MenuItem, 
+  Select, 
+  Box,
+  Grid,
+  Paper,
+  Typography
+} from '@mui/material';
+import { DataGrid } from '@mui/x-data-grid';
 import DatePicker from 'react-datepicker';
 import { 
   fetchCompareData,
@@ -74,8 +87,11 @@ const getStatusColor = (status) => {
 };
 
 const ColumnQuery = () => {
+  const [columns, setColumns] = useState([]);
+  const [selectedColumns, setSelectedColumns] = useState([]);
+  const [file, setFile] = useState(null);
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [chartData, setChartData] = useState(null);
   const [executedDateRange, setExecutedDateRange] = useState({
     start: null,
@@ -96,6 +112,68 @@ const ColumnQuery = () => {
   const [metricsPreview, setMetricsPreview] = useState([]);
   const [analysisReport, setAnalysisReport] = useState(null);
   const [dataType, setDataType] = useState('daily');
+
+  // Fetch available columns when component mounts
+  useEffect(() => {
+    fetchColumns();
+  }, []);
+
+  const fetchColumns = async () => {
+    try {
+      const response = await axios.get('http://localhost:3000/api/columns');
+      setColumns(response.data);
+    } catch (error) {
+      console.error('Error fetching columns:', error);
+    }
+  };
+
+  const handleFileChange = (event) => {
+    setFile(event.target.files[0]);
+  };
+
+  const handleColumnChange = (event) => {
+    setSelectedColumns(event.target.value);
+  };
+
+  const handleSubmit = async () => {
+    if (!file || selectedColumns.length === 0) {
+      alert('Please select a file and at least one column');
+      return;
+    }
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      // First, process the file to get Site IDs
+      const fileResponse = await axios.post('http://localhost:3000/api/process', formData);
+      const siteIds = fileResponse.data.parameters;
+
+      // Then, fetch data for selected columns and Site IDs
+      const dataResponse = await axios.post('http://localhost:3000/api/data', {
+        siteIds: siteIds,
+        metrics: selectedColumns,
+        startDate: '2024-01-01', // You might want to make these dates dynamic
+        endDate: '2024-12-31'
+      });
+
+      setData(dataResponse.data.data);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error processing data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Define columns for DataGrid
+  const gridColumns = selectedColumns.map(col => ({
+    field: col,
+    headerName: col,
+    width: 150,
+    valueGetter: (params) => params.row[col]
+  }));
 
   const handleSiteFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -125,7 +203,7 @@ const ColumnQuery = () => {
       setSelectedSites(response.sites);
       
     } catch (error) {
-      setError('Error processing site file: ' + error.message);
+      console.error('Error processing site file: ' + error.message);
     }
   };
 
@@ -149,19 +227,19 @@ const ColumnQuery = () => {
       setSelectedMetrics(response.metrics);
       
     } catch (error) {
-      setError('Error processing metrics file: ' + error.message);
+      console.error('Error processing metrics file: ' + error.message);
     }
   };
 
   const fetchComparisonData = async () => {
     if (!selectedSites.length || !selectedMetrics.length) {
-      setError('Please upload both site list and metrics files');
+      console.error('Please upload both site list and metrics files');
       return;
     }
 
     if (!executedDateRange.start || !executedDateRange.end || 
         !surroundingDateRange.start || !surroundingDateRange.end) {
-      setError('Please select date ranges for both periods');
+      console.error('Please select date ranges for both periods');
       return;
     }
 
@@ -225,7 +303,7 @@ const ColumnQuery = () => {
 
       setAnalysisReport(report);
     } catch (error) {
-      setError('Error fetching comparison data: ' + error.message);
+      console.error('Error fetching comparison data: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -530,7 +608,7 @@ const ColumnQuery = () => {
       pdf.save(`KPI_Analysis_Report_${formatDateForAPI(executedDateRange.start)}.pdf`);
     } catch (error) {
       console.error('Error generating report:', error);
-      setError('Failed to generate report');
+      console.error('Failed to generate report');
     }
   };
 
@@ -791,280 +869,67 @@ const ColumnQuery = () => {
   };
 
   return (
-    <div className="column-query">
-      <header className="page-header">
-        <h1>KPI Comparison Analysis</h1>
-      </header>
-
-      <section className="section-card">
-        <h2>Upload Files</h2>
-        <div className="file-uploads">
-          <div className="file-upload-group">
-            <h3>Site List</h3>
-            <div className="file-input-wrapper">
-          <input
-            type="file"
-            accept=".csv"
-                onChange={handleSiteFileUpload}
-              />
-              <small className="file-help">Upload CSV containing Site ID, eNodeB ID, Cell ID</small>
-            </div>
-            {selectedSites.length > 0 && (
-              <div className="upload-info">
-                <span>{selectedSites.length} sites loaded</span>
-              </div>
-            )}
-            {sitePreview.length > 0 && (
-            <div className="csv-preview">
-                <h4>File Preview</h4>
-                <div className="table-wrapper">
-                <table>
-                  <thead>
-                    <tr>
-                        <th>Site ID</th>
-                        <th>eNodeB ID</th>
-                        <th>Cell ID</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                      {sitePreview.map((row, index) => (
-                      <tr key={index}>
-                          <td>{row.siteId}</td>
-                          <td>{row.eNodeBId}</td>
-                          <td>{row.cellId}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-
-          <div className="file-upload-group">
-            <h3>KPI Metrics</h3>
-            <div className="file-input-wrapper">
-                <input
-                type="file" 
+    <Box sx={{ p: 3 }}>
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Select Data
+            </Typography>
+            
+            <Box sx={{ mb: 2 }}>
+              <input
+                type="file"
                 accept=".csv"
-                onChange={handleMetricsFileUpload}
+                onChange={handleFileChange}
               />
-              <small className="file-help">Upload CSV containing KPI metric names</small>
-            </div>
-            {selectedMetrics.length > 0 && (
-              <div className="upload-info">
-                <span>{selectedMetrics.length} metrics loaded</span>
-              </div>
-            )}
-            {metricsPreview.length > 0 && (
-              <div className="csv-preview">
-                <h4>File Preview</h4>
-                <div className="table-wrapper">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Metrics</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {metricsPreview.map((metric, index) => (
-                        <tr key={index}>
-                          <td>{metric}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
+            </Box>
 
-      <section className="section-card">
-        <h2>Select Date Ranges</h2>
-        <div className="date-ranges">
-          <div className="date-range-group">
-            <h3>Executed Period</h3>
-            <div className="date-inputs">
-                <DatePicker
-                selected={executedDateRange.start}
-                onChange={date => setExecutedDateRange(prev => ({ ...prev, start: date }))}
-                placeholderText="Start Date"
-                dateFormat="dd/MM/yyyy"
-                  className="date-input"
-                />
-                <DatePicker
-                selected={executedDateRange.end}
-                onChange={date => setExecutedDateRange(prev => ({ ...prev, end: date }))}
-                placeholderText="End Date"
-                dateFormat="dd/MM/yyyy"
-                minDate={executedDateRange.start}
-              />
-            </div>
-          </div>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Select Columns</InputLabel>
+              <Select
+                multiple
+                value={selectedColumns}
+                onChange={handleColumnChange}
+                label="Select Columns"
+              >
+                {columns.map((column) => (
+                  <MenuItem key={column} value={column}>
+                    {column}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-          <div className="date-range-group">
-            <h3>Surrounding Period</h3>
-            <div className="date-inputs">
-                <DatePicker
-                selected={surroundingDateRange.start}
-                onChange={date => setSurroundingDateRange(prev => ({ ...prev, start: date }))}
-                placeholderText="Start Date"
-                dateFormat="dd/MM/yyyy"
-              />
-                <DatePicker
-                selected={surroundingDateRange.end}
-                onChange={date => setSurroundingDateRange(prev => ({ ...prev, end: date }))}
-                placeholderText="End Date"
-                dateFormat="dd/MM/yyyy"
-                minDate={surroundingDateRange.start}
-              />
-            </div>
-          </div>
-        </div>
-
-        <section className="section-card">
-          <h2>Select Data Type</h2>
-          <div className="data-type-selector">
-            <label className="radio-label">
-              <input
-                type="radio"
-                name="dataType"
-                value="daily"
-                checked={dataType === 'daily'}
-                onChange={(e) => setDataType(e.target.value)}
-              />
-              Daily Data
-            </label>
-            <label className="radio-label">
-              <input
-                type="radio"
-                name="dataType"
-                value="hourly"
-                checked={dataType === 'hourly'}
-                onChange={(e) => setDataType(e.target.value)}
-              />
-              Hourly Data
-            </label>
-          </div>
-        </section>
-
-        <button 
-          className="compare-button"
-          onClick={fetchComparisonData}
-          disabled={loading || !selectedSites.length || !selectedMetrics.length}
-        >
-          {loading ? 'Loading...' : 'Compare Data'}
-        </button>
-      </section>
-
-      {/* Chart and Data Preview sections */}
-      {chartData && (
-        <section className="section-card" id="report-container">
-          <div className="section-header">
-            <h2>KPI Visualizations</h2>
-            <button 
-              className="download-button"
-              onClick={downloadReport}
-              title="Download Report"
+            <Button 
+              variant="contained" 
+              onClick={handleSubmit}
+              disabled={loading}
             >
-              <FaDownload /> Download Report
-            </button>
-          </div>
-          <div className="charts-grid">
-            {chartData.map(({ metric, chartData, options }) => (
-              <div key={metric} className="chart-section">
-                      <Line
-                  data={chartData}
-                  options={options}
-                />
-              </div>
-            ))}
-                </div>
+              {loading ? 'Processing...' : 'Submit'}
+            </Button>
+          </Paper>
+        </Grid>
 
-          <div className="data-preview">
-            <h3>Data Preview</h3>
-            <div className="preview-tabs">
-              <button 
-                className={`tab-button ${activeTab === 'executed' ? 'active' : ''}`}
-                onClick={() => setActiveTab('executed')}
-              >
-                Executed Period
-              </button>
-              <button 
-                className={`tab-button ${activeTab === 'surrounding' ? 'active' : ''}`}
-                onClick={() => setActiveTab('surrounding')}
-              >
-                Surrounding Period
-              </button>
-                </div>
-
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    {selectedMetrics.map(metric => (
-                      <th key={metric}>{metric}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {previewData[activeTab].slice(0, PREVIEW_ROWS).map((row, index) => (
-                    <tr key={index}>
-                      <td>{new Date(row.DAY).toLocaleDateString('en-GB')}</td>
-                      {selectedMetrics.map(metric => (
-                        <td key={metric}>{row[metric]?.toFixed(2) || '-'}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-                </div>
-              </div>
-
-          {/* KPI Analysis Report Table */}
-          {analysisReport && (
-            <div className="analysis-section">
-              <h3>KPI Analysis Summary</h3>
-              <table className="analysis-table">
-                <thead>
-                  <tr>
-                    <th>Metric</th>
-                    <th>Before</th>
-                    <th>After</th>
-                    <th>Change (%)</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(analysisReport).map(([metric, data]) => (
-                    <tr key={metric}>
-                      <td>{metric}</td>
-                      <td>{data.before.toFixed(2)}</td>
-                      <td>{data.after.toFixed(2)}</td>
-                      <td style={{ color: data.change < 0 ? '#dc3545' : '#28a745' }}>
-                        {data.change > 0 ? '+' : ''}{data.change.toFixed(2)}%
-                      </td>
-                      <td style={{ color: getStatusColor(data.status) }}>
-                        {data.status}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
-
-      {error && (
-        <div className="error-message">
-          {error}
-        </div>
-      )}
-    </div>
+        {data.length > 0 && (
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2, height: 400 }}>
+              <DataGrid
+                rows={data.map((row, index) => ({ id: index, ...row }))}
+                columns={[
+                  { field: 'Day', headerName: 'Day', width: 150 },
+                  { field: 'Site_ID', headerName: 'Site ID', width: 150 },
+                  { field: 'NE_Name', headerName: 'NE Name', width: 150 },
+                  ...gridColumns
+                ]}
+                pageSize={5}
+                rowsPerPageOptions={[5]}
+              />
+            </Paper>
+          </Grid>
+        )}
+      </Grid>
+    </Box>
   );
 };
 
