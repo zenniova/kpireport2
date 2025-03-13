@@ -3,16 +3,14 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const config = {
-    server: process.env.DB_SERVER || 'ZENNI',
-    database: process.env.DB_NAME || 'daily_kpi_performance',
-    user: process.env.DB_USER || 'zenni',
-    password: process.env.DB_PASSWORD || '#ICTelkomJabar1',
+    server: 'DESKTOP-77H468P',
+    database: 'daily_kpi_performance',
     options: {
         encrypt: false,
         trustServerCertificate: true,
         enableArithAbort: true,
-        instanceName: 'SQLEXPRESS',
-        port: parseInt(process.env.DB_PORT || '1433')
+        trustedConnection: true,
+        integratedSecurity: true
     }
 };
 
@@ -27,9 +25,7 @@ async function connectToDatabase() {
         console.log('Attempting to connect with config:', {
             server: config.server,
             database: config.database,
-            user: config.user,
-            instanceName: config.options.instanceName,
-            port: config.options.port
+            authentication: 'Windows Authentication'
         });
         
         pool = await new sql.ConnectionPool(config).connect();
