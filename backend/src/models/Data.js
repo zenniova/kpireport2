@@ -12,6 +12,16 @@ class Data {
             cell_name: this.cellName
         };
     }
+
+    static async findAll(pool, query = '') {
+        try {
+            const result = await pool.request()
+                .query(`SELECT * FROM [4G cell daily Beyond] ${query}`);
+            return result.recordset;
+        } catch (error) {
+            throw error;
+        }
+    }
 }
 
 module.exports = Data; 

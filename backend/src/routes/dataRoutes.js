@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const dataController = require('../controllers/dataController');
 const upload = require('../middleware/upload');
+const { validateDateRange, validateSiteIds } = require('../middleware/validate');
 
 // Multer config
 const storage = multer.diskStorage({
@@ -31,7 +32,7 @@ router.get('/test', (req, res) => {
 router.get('/columns', dataController.getColumns);
 
 // Route to get data for selected columns
-router.post('/data', dataController.getData);
+router.post('/data', validateDateRange, validateSiteIds, dataController.getData);
 
 // Main route
 router.post('/process-data', uploadMulter.single('file'), dataController.processData);
@@ -41,7 +42,7 @@ router.get('/date-range', dataController.getDateRange);
 
 router.post('/site-file', uploadMulter.single('siteFile'), dataController.processSiteFile);
 router.post('/metrics-file', uploadMulter.single('metricsFile'), dataController.processMetricsFile);
-router.post('/compare-data', dataController.getComparisonData);
+router.post('/comparison', validateDateRange, dataController.getComparisonData);
 
 // Get routes
 router.get('/metrics', dataController.getNetworkMetrics);

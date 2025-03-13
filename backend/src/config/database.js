@@ -1,45 +1,48 @@
 const sql = require('mssql');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-const dbConfig = {
-    server: process.env.DB_HOST,     // Gunakan DB_HOST sebagai server
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    port: parseInt(process.env.DB_PORT),
+const config = {
+    server: process.env.DB_SERVER || 'ZENNI',
+    database: process.env.DB_NAME || 'daily_kpi_performance',
+    user: process.env.DB_USER || 'zenni',
+    password: process.env.DB_PASSWORD || '#ICTelkomJabar1',
     options: {
-        encrypt: false,              // Untuk koneksi lokal
+        encrypt: false,
         trustServerCertificate: true,
         enableArithAbort: true,
-        instanceName: 'SQLEXPRESS'   // Jika menggunakan SQL Express
+        instanceName: 'SQLEXPRESS',
+        port: parseInt(process.env.DB_PORT || '1433')
     }
 };
 
-console.log('Database Config:', {
-    server: dbConfig.server,
-    database: dbConfig.database,
-    user: dbConfig.user,
-    port: dbConfig.port
-});
+let pool = null;
 
-const poolPromise = new sql.ConnectionPool(dbConfig)
-    .connect()
-    .then(pool => {
-        console.log('Connected to MSSQL');
-        return pool;
-    })
-    .catch(err => {
-        console.log('Database Connection Failed! Bad Config:', err);
-        console.log('Connection details:', {
-            server: dbConfig.server,
-            database: dbConfig.database,
-            user: dbConfig.user,
-            port: dbConfig.port
+async function connectToDatabase() {
+    try {
+        if (pool) {
+            return pool;
+        }
+        
+        console.log('Attempting to connect with config:', {
+            server: config.server,
+            database: config.database,
+            user: config.user,
+            instanceName: config.options.instanceName,
+            port: config.options.port
         });
-        return err;
-    });
+        
+        pool = await new sql.ConnectionPool(config).connect();
+        console.log('✅ Connected to database successfully');
+        return pool;
+    } catch (err) {
+        console.error('❌ Database Connection Failed:', err);
+        throw err;
+    }
+}
 
 module.exports = {
+    connectToDatabase,
     sql,
-    poolPromise
-}; 
+    getPool: () => pool
+};

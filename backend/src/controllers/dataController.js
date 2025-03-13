@@ -1,13 +1,13 @@
 const Data = require('../models/Data');
 const csv = require('csv-parser');
 const fs = require('fs');
-const { sql, poolPromise } = require('../config/database');
+const { sql, getPool } = require('../config/database');
 
 const dataController = {
   // Get columns
   async getColumns(req, res) {
     try {
-      const pool = await poolPromise;
+      const pool = getPool();
       const result = await pool.request()
         .query(`
           SELECT COLUMN_NAME
@@ -25,7 +25,7 @@ const dataController = {
   // Process CSV file and get data based on parameters
   async processData(req, res) {
     try {
-      const pool = await poolPromise;
+      const pool = getPool();
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
@@ -123,7 +123,7 @@ const dataController = {
       
       // Duplicate date parameters for both format conditions
       const queryParams = [...parameters, startDate, endDate, startDate, endDate];
-      const pool = await poolPromise;
+      const pool = getPool();
       const result = await pool.request()
         .input('Site_ID', sql.VarChar, parameters)
         .input('startDate', sql.VarChar, startDate)
@@ -161,7 +161,7 @@ const dataController = {
             ELSE NULL 
           END ASC
       `;
-      const pool = await poolPromise;
+      const pool = getPool();
       const result = await pool.request().query(query);
       console.log('Raw dates from DB:', result.recordset);
       
@@ -405,7 +405,7 @@ const dataController = {
       }
 
       // Filter out any non-column metrics
-      const pool = await poolPromise;
+      const pool = getPool();
       const result = await pool.request()
         .query(`
           SELECT COLUMN_NAME
@@ -499,7 +499,7 @@ const dataController = {
       const executedQuery = getQuery('executed');
       const surroundingQuery = getQuery('surrounding');
 
-      const pool = await poolPromise;
+      const pool = getPool();
       const executedResult = await pool.request()
         .input('Site_ID', sql.VarChar, siteIds)
         .input('executedStart', sql.VarChar, executedStart)
@@ -569,7 +569,7 @@ const dataController = {
   processNetworkData: async (req, res) => {
     try {
       const data = req.body;
-      const pool = await poolPromise;
+      const pool = getPool();
       
       // Query untuk menyimpan data ke SQL Server
       const query = `
@@ -617,7 +617,7 @@ const dataController = {
 
   getNetworkMetrics: async (req, res) => {
     try {
-      const pool = await poolPromise;
+      const pool = getPool();
       const result = await pool.request()
         .query('SELECT * FROM [4G cell daily Beyond]');
       
