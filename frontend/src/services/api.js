@@ -3,7 +3,7 @@ import { saveAs } from 'file-saver';
 import * as XLSX from 'xlsx';
 import config from '../config/config';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = config.API_URL;
 
 // Create axios instance with config
 const axiosInstance = axios.create({
@@ -25,7 +25,15 @@ export const fetchColumns = async () => {
 
 export const fetchData = async (params) => {
   try {
-    const response = await axios.post(`${API_URL}/data`, params);
+    // Format metrics dengan []
+    const formattedParams = {
+      ...params,
+      metrics: params.metrics.map(metric => 
+        metric.startsWith('[') ? metric : `[${metric}]`
+      )
+    };
+    
+    const response = await axios.post(`${API_URL}/data`, formattedParams);
     return response.data;
   } catch (error) {
     console.error('Error fetching data:', error);
@@ -149,6 +157,54 @@ export const fetchCompareData = async (params) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching comparison data:', error);
+    throw error;
+  }
+};
+
+export const fetchCellList = async (siteIds) => {
+    try {
+        const response = await axios.post(`${API_URL}/cell-list`, { siteIds });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching cell list:', error);
+        throw error;
+    }
+};
+
+export const fetchKPIData = async (params) => {
+    try {
+        const response = await axios.post(`${API_URL}/kpi-data`, params);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching KPI data:', error);
+        throw error;
+    }
+};
+
+export const processCellList = async (formData) => {
+  try {
+    const response = await axiosInstance.post('/process-cell-list', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error processing cell list:', error);
+    throw error;
+  }
+};
+
+export const processKPIList = async (formData) => {
+  try {
+    const response = await axiosInstance.post('/process-kpi-list', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error processing KPI list:', error);
     throw error;
   }
 }; 

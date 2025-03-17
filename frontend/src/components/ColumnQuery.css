@@ -75,18 +75,11 @@
   width: 100%;
 }
 
-.react-datepicker__input-container {
-  width: 100%;
-}
-
 .react-datepicker__input-container input {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #dee2e6;
+  padding: 8px;
+  border: 1px solid #ccc;
   border-radius: 4px;
-  font-size: 0.95rem;
-  background-color: white;
-  box-sizing: border-box;
 }
 
 /* Remove extra borders/backgrounds from datepicker */
@@ -144,10 +137,13 @@ button:disabled {
 }
 
 .error-message {
-  color: #dc3545;
-  padding: 10px;
-  background-color: #f8d7da;
-  border-radius: 4px;
+  color: #f44336;
+  margin-top: 8px;
+}
+
+.success-message {
+  color: #4caf50;
+  margin-top: 8px;
 }
 
 .results {
@@ -206,10 +202,9 @@ tr:nth-child(even) {
 }
 
 .chart-container {
-  margin-top: 30px;
-  padding: 20px;
-  background-color: #f8f9fa;
-  border-radius: 6px;
+  position: relative;
+  margin: auto;
+  height: 400px;
 }
 
 .chart-container h3 {
@@ -1067,4 +1062,27 @@ tr:last-child td {
 .analysis-section h3 {
   margin-bottom: 1rem;
   color: #495057;
+}
+
+.upload-section {
+  margin-bottom: 24px;
+}
+
+.date-picker-container {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
 } 

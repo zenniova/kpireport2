@@ -9,14 +9,21 @@ import {
   Box,
   Grid,
   Paper,
-  Typography
+  Typography,
+  Tabs,
+  Tab,
+  CircularProgress
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import DatePicker from 'react-datepicker';
 import { 
   fetchCompareData,
   processSiteFile,
-  processMetricsFile
+  processMetricsFile,
+  fetchCellList,
+  fetchKPIData,
+  processCellList,
+  processKPIList
 } from '../services/api';
 import { Line } from 'react-chartjs-2';
 import {
@@ -112,6 +119,16 @@ const ColumnQuery = () => {
   const [metricsPreview, setMetricsPreview] = useState([]);
   const [analysisReport, setAnalysisReport] = useState(null);
   const [dataType, setDataType] = useState('daily');
+  const [cellData, setCellData] = useState({
+    surrounding: [],
+    executed: []
+  });
+  const [kpiMetrics, setKpiMetrics] = useState([]);
+  const [dateRange, setDateRange] = useState({
+    startDate: null,
+    endDate: null
+  });
+  const [error, setError] = useState(null);
 
   // Fetch available columns when component mounts
   useEffect(() => {
@@ -132,47 +149,125 @@ const ColumnQuery = () => {
   };
 
   const handleColumnChange = (event) => {
-    setSelectedColumns(event.target.value);
+    const selectedCols = event.target.value.map(col => 
+      col.startsWith('[') ? col : `[${col}]`
+    );
+    setSelectedColumns(selectedCols);
   };
 
-  const handleSubmit = async () => {
-    if (!file || selectedColumns.length === 0) {
-      alert('Please select a file and at least one column');
-      return;
-    }
-
-    setLoading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
+  const handleCellListUpload = async (event) => {
     try {
-      // First, process the file to get Site IDs
-      const fileResponse = await axios.post('http://localhost:3000/api/process', formData);
-      const siteIds = fileResponse.data.parameters;
+      setLoading(true);
+      setError(null);
+      const file = event.target.files[0];
+      if (!file) return;
 
-      // Then, fetch data for selected columns and Site IDs
-      const dataResponse = await axios.post('http://localhost:3000/api/data', {
-        siteIds: siteIds,
-        metrics: selectedColumns,
-        startDate: '2024-01-01', // You might want to make these dates dynamic
-        endDate: '2024-12-31'
-      });
+      const formData = new FormData();
+      formData.append('cellList', file);
 
-      setData(dataResponse.data.data);
+      const response = await processCellList(formData);
+      setCellData(response.data);
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error processing data');
+      setError('Error uploading cell list: ' + error.message);
+      console.error('Error uploading cell list:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Define columns for DataGrid
+  const handleKPIListUpload = async (event) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('kpiList', file);
+
+      const response = await processKPIList(formData);
+      setKpiMetrics(response.metrics);
+    } catch (error) {
+      setError('Error uploading KPI list: ' + error.message);
+      console.error('Error uploading KPI list:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetchKPIData({
+        cells: cellData,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        metrics: kpiMetrics
+      });
+
+      const processedChartData = processChartData(response.data);
+      setChartData(processedChartData);
+    } catch (error) {
+      setError('Error generating charts: ' + error.message);
+      console.error('Error generating charts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processChartData = (data) => {
+    const { surrounding, executed } = data;
+    
+    return kpiMetrics.map(metric => ({
+      metric,
+      data: {
+        labels: surrounding.map(item => item.Day),
+        datasets: [
+          {
+            label: 'Surrounding',
+            data: surrounding.map(item => item[metric]),
+            borderColor: '#2196f3',
+            backgroundColor: 'rgba(33, 150, 243, 0.1)',
+            fill: true
+          },
+          {
+            label: 'Executed',
+            data: executed.map(item => item[metric]),
+            borderColor: '#f50057',
+            backgroundColor: 'rgba(245, 0, 87, 0.1)',
+            fill: true
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: metric
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    }));
+  };
+
+  // Define columns untuk DataGrid
   const gridColumns = selectedColumns.map(col => ({
-    field: col,
-    headerName: col,
+    field: col.replace(/[\[\]]/g, ''), // Hapus tanda kurung untuk display
+    headerName: col.replace(/[\[\]]/g, ''),
     width: 150,
-    valueGetter: (params) => params.row[col]
+    valueGetter: (params) => params.row[col] // Gunakan nama kolom dengan []
   }));
 
   const handleSiteFileUpload = async (e) => {
@@ -874,60 +969,57 @@ const ColumnQuery = () => {
         <Grid item xs={12}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
-              Select Data
+              Upload Files
             </Typography>
             
             <Box sx={{ mb: 2 }}>
               <input
                 type="file"
                 accept=".csv"
-                onChange={handleFileChange}
+                onChange={handleCellListUpload}
               />
+              <Typography variant="caption">
+                Upload Cell List CSV
+              </Typography>
             </Box>
 
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Select Columns</InputLabel>
-              <Select
-                multiple
-                value={selectedColumns}
-                onChange={handleColumnChange}
-                label="Select Columns"
-              >
-                {columns.map((column) => (
-                  <MenuItem key={column} value={column}>
-                    {column}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Box sx={{ mb: 2 }}>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleKPIListUpload}
+              />
+              <Typography variant="caption">
+                Upload KPI List CSV
+              </Typography>
+            </Box>
+
+            <DateRangePicker
+              startDate={dateRange.startDate}
+              endDate={dateRange.endDate}
+              onChange={({ startDate, endDate }) => setDateRange({ startDate, endDate })}
+            />
 
             <Button 
               variant="contained" 
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={!cellData || !kpiMetrics.length}
             >
-              {loading ? 'Processing...' : 'Submit'}
+              Generate Charts
             </Button>
           </Paper>
         </Grid>
 
-        {data.length > 0 && (
-          <Grid item xs={12}>
-            <Paper sx={{ p: 2, height: 400 }}>
-              <DataGrid
-                rows={data.map((row, index) => ({ id: index, ...row }))}
-                columns={[
-                  { field: 'Day', headerName: 'Day', width: 150 },
-                  { field: 'Site_ID', headerName: 'Site ID', width: 150 },
-                  { field: 'NE_Name', headerName: 'NE Name', width: 150 },
-                  ...gridColumns
-                ]}
-                pageSize={5}
-                rowsPerPageOptions={[5]}
-              />
+        {chartData && chartData.map((chart, index) => (
+          <Grid item xs={12} md={6} key={index}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                {chart.metric}
+              </Typography>
+              <Line data={chart.data} />
             </Paper>
           </Grid>
-        )}
+        ))}
       </Grid>
     </Box>
   );
